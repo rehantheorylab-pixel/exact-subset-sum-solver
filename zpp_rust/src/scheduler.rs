@@ -165,8 +165,8 @@ pub fn schedule(
             scored.push(ScoredEngine::new("Backward", base2 + 88.0));
         }
         31..=50 => {
-            // User-designed engines get first crack at 30-50 element range
             scored.push(ScoredEngine::new("GroupDecompose", base2 + 99.0));
+            scored.push(ScoredEngine::new("HashMITM", base2 + 98.5));
             scored.push(ScoredEngine::new("AdaptiveFunnel", base2 + 97.0));
             scored.push(ScoredEngine::new("GDEP", base2 + 95.0));
             scored.push(ScoredEngine::new("Backward", base2 + 91.0));
@@ -174,11 +174,23 @@ pub fn schedule(
             scored.push(ScoredEngine::new("TurboSpecEngine", base2 + 86.0));
             scored.push(ScoredEngine::new("MD-MITM", base2 + 84.0));
             scored.push(ScoredEngine::new("PMAS-Balance", base2 + 80.0));
-            // Schroeppel-Shamir as fallback
             scored.push(ScoredEngine::new("Schroeppel-Shamir", base2 + 78.0));
         }
-        51..=70 => {
-            scored.push(ScoredEngine::new("GroupDecompose", base2 + 96.0));
+        51..=64 => {
+            scored.push(ScoredEngine::new("HashMITM", base2 + 110.0));
+            scored.push(ScoredEngine::new("GroupDecompose", base2 + 108.0));
+            scored.push(ScoredEngine::new("Schroeppel-Shamir", base2 + 106.0));
+            scored.push(ScoredEngine::new("GDEP", base2 + 94.0));
+            scored.push(ScoredEngine::new("Backward", base2 + 90.0));
+            scored.push(ScoredEngine::new("Bridge", base2 + 88.0));
+            scored.push(ScoredEngine::new("TurboSpecEngine", base2 + 84.0));
+            scored.push(ScoredEngine::new("MD-MITM", base2 + 82.0));
+            scored.push(ScoredEngine::new("PMAS-Balance", base2 + 78.0));
+            scored.push(ScoredEngine::new("APDE", base2 + 74.0));
+        }
+        65..=70 => {
+            scored.push(ScoredEngine::new("GroupDecompose", base2 + 110.0));
+            scored.push(ScoredEngine::new("Schroeppel-Shamir", base2 + 109.0));
             scored.push(ScoredEngine::new("GDEP", base2 + 94.0));
             scored.push(ScoredEngine::new("Backward", base2 + 90.0));
             scored.push(ScoredEngine::new("Bridge", base2 + 88.0));
@@ -248,25 +260,23 @@ pub fn schedule(
     }
     */
 
-    // DensitySplit: Novel density bifurcation — experimental
-    if p.n >= 24 && p.n <= 50 && p.u128_safe() {
+    // DensitySplit: Novel density bifurcation — experimental, capped
+    if p.n >= 24 && p.n <= 44 && p.u128_safe() {
         scored.push(ScoredEngine::new("DensitySplit", phase_score(2, 75.0)));
     }
 
-    if p.n >= 5 && p.u128_safe() {
+    // GradientSolver: capped for stability
+    if p.n >= 5 && p.n <= 50 && p.u128_safe() {
         scored.push(ScoredEngine::new("GradientSolver", phase_score(1, 89.0)));
     }
 
-    if p.n >= 10 && p.u128_safe() {
+    if p.n >= 10 && p.n <= 50 && p.u128_safe() {
         scored.push(ScoredEngine::new("Genetic", phase_score(2, 70.0)));
     }
 
-    // HashMITM: for all n but half capped at 2^22
-    if p.n >= 20 && p.u128_safe() {
-        let half = p.n / 2;
-        if half <= 24 {
-            scored.push(ScoredEngine::new("HashMITM", phase_score(2, 99.9)));
-        }
+    // HashMITM: excellent for n=20-64 (hash+L3-friendly, SS heap for n≥40)
+    if p.n >= 20 && p.n <= 64 && p.u128_safe() {
+        scored.push(ScoredEngine::new("HashMITM", phase_score(2, 99.9)));
     }
 
     // MicroDecompose: 2-element groups, fastest for n=20-60

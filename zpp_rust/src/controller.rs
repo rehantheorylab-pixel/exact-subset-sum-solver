@@ -22,7 +22,7 @@
 use num_bigint::BigUint;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -37,7 +37,6 @@ pub struct Shared {
     pub proved_impossible: AtomicBool,
     pub blackboard: Mutex<HashSet<BigUint>>,
     pub discovered_count: AtomicU64,
-    pub signal: Condvar,
 }
 
 impl Shared {
@@ -49,7 +48,6 @@ impl Shared {
             proved_impossible: AtomicBool::new(false),
             blackboard: Mutex::new(HashSet::with_capacity(1024)),
             discovered_count: AtomicU64::new(0),
-            signal: Condvar::new(),
         }
     }
     #[inline]
@@ -65,7 +63,12 @@ impl Shared {
         self.blackboard.lock().unwrap().insert(sum.clone())
     }
     pub fn stopped(&self) -> bool {
-        self.stop.load(Ordering::Relaxed)
+        self.stop.load(Ordering::Relaxed) || self.proved_impossible.load(Ordering::Relaxed)
+    }
+
+    pub fn prove_impossible(&self) {
+        self.proved_impossible.store(true, Ordering::Release);
+        self.stop.store(true, Ordering::Release);
     }
     pub fn report(&self, sol: Vec<BigUint>, name: &'static str) {
         if self.stop.load(Ordering::Relaxed) { return; }
@@ -75,7 +78,6 @@ impl Shared {
         if guard.is_none() {
             *guard = Some((sol, name));
             self.stop.store(true, Ordering::Release);
-            self.signal.notify_all();
         }
     }
 }
@@ -84,6 +86,8 @@ pub trait Engine: Send + Sync {
     fn name(&self) -> &'static str;
     fn run(&self, sh: &Shared);
 }
+
+
 
 pub struct Outcome {
     pub solution: Option<Vec<BigUint>>,
@@ -95,38 +99,33 @@ pub struct Outcome {
 pub fn race(profile: Profile, engines: Vec<Box<dyn Engine>>, max_time: Duration) -> Outcome {
     let shared = Arc::new(Shared::new(profile));
     let start = Instant::now();
-    let ncpus = thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
-    let batch_size = (ncpus * 2).min(12);
-
-    // Arc the engines so they can be shared across threads
     let engines = Arc::new(engines);
-    let mut handles = Vec::with_capacity(engines.len());
+    let num_engines = engines.len();
+    let mut handles = Vec::with_capacity(num_engines);
 
-    // Staggered launch: fast engines (high score) spawn first in small batches.
-    // Heavy engines launch only if fast ones don't solve within 50ms.
-    for batch_start in (0..engines.len()).step_by(batch_size) {
-        if shared.stopped() || start.elapsed() >= max_time {
+
+    for idx in 0..num_engines {
+        let sh = Arc::clone(&shared);
+        let engines = Arc::clone(&engines);
+        handles.push(thread::spawn(move || {
+            engines[idx].run(&sh);
+            engines[idx].name()
+        }));
+    }
+
+    // Spin-wait: avoid QPC (start.elapsed()) every iteration — it's ~1µs on old CPUs.
+    let mut spin_count = 0u64;
+    loop {
+        if shared.stop.load(Ordering::Relaxed) || shared.proved_impossible.load(Ordering::Relaxed) {
             break;
         }
-        let batch_end = (batch_start + batch_size).min(engines.len());
-        for idx in batch_start..batch_end {
-            let sh = Arc::clone(&shared);
-            let engines = Arc::clone(&engines);
-            handles.push(thread::spawn(move || { engines[idx].run(&sh); }));
-        }
-        thread::sleep(Duration::from_millis(100)); // Give fast engines 100ms head start
-    }
-    // Wait on Condvar with timeout instead of busy-polling.
-    let mut guard = shared.solution.lock().unwrap();
-    let remaining = max_time.saturating_sub(start.elapsed());
-    while !shared.stopped() && start.elapsed() < max_time {
-        let (_guard, timeout) = shared.signal.wait_timeout(guard, remaining).unwrap();
-        guard = _guard;
-        if timeout.timed_out() || shared.stopped() {
+        spin_count += 1;
+        // Check timeout every 65536 iterations (~130µs at 2ns/iter on modern CPU)
+        if (spin_count & 0xFFFF) == 0 && start.elapsed() >= max_time {
             break;
         }
+        std::hint::spin_loop();
     }
-    drop(guard);
     shared.stop.store(true, Ordering::Release);
     for h in handles { let _ = h.join(); }
     let wall = start.elapsed();
@@ -142,7 +141,17 @@ pub fn race(profile: Profile, engines: Vec<Box<dyn Engine>>, max_time: Duration)
 pub fn pick_engines(p: &Profile, hw: &HardwareProfile) -> Vec<&'static str> {
     // Detect structural patterns to guide engine selection.
     let struct_info = StructureInfo::detect(&p.numbers);
-    let ordered = crate::scheduler::schedule(p, &struct_info, hw);
+    let mut ordered = crate::scheduler::schedule(p, &struct_info, hw);
+    // Minimize contention: with 2 cores, max 2 engine threads + main.
+    // Keep fast pre-check engines (Residue, DigitFilter, Dominance) since they're
+    // sub-millisecond checks that complete before HashMITM does real work.
+    if p.n >= 36 && p.n <= 45 {
+        let keep: [&str; 4] = ["Residue", "DigitFilter", "Dominance", "HashMITM"];
+        ordered.retain(|e| keep.contains(e));
+        if !ordered.contains(&"HashMITM") {
+            ordered.push("HashMITM");
+        }
+    }
     if cfg!(debug_assertions) {
         // Verify scheduler output is a superset of core engines.
         let core = ["Residue", "DigitFilter", "Dominance"];
