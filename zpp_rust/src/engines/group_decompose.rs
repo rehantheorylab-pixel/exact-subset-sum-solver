@@ -56,20 +56,38 @@ impl GroupDecomposeEngine {
         // 3. Average-density heuristic: all elements > target?
         if sorted[0] > target { return; }
 
-        // === Core heap walk ===
+        // Quarter sizing
         let q = n / 4;
-        let qa_sz = q;
-        let qb_sz = q;
-        let qc_sz = q;
-        let qd_sz = n - 3 * q;
+        let rem = n - 3*q;
+        let big_threshold = target / 4;
+        let big_count = sorted.iter().filter(|&&v| v > big_threshold).count();
+        let extra_q4 = (big_count.saturating_sub(q + rem)).min(6).min(q.saturating_sub(2));
+        let qa_sz = q - extra_q4/3;
+        let qb_sz = q - extra_q4/3;
+        let qc_sz = q - extra_q4/3;
+        let qd_sz = rem + extra_q4;
 
         let qa = &sorted[0..qa_sz];
         let qb = &sorted[qa_sz..(qa_sz + qb_sz)];
         let qc = &sorted[(qa_sz + qb_sz)..(qa_sz + qb_sz + qc_sz)];
         let qd = &sorted[(qa_sz + qb_sz + qc_sz)..];
 
-        if sh.stopped() { return; }
+        // For n>=40: monolithic heap walk with stop checks
+        // (schroeppel_shamir_u128 is faster but has no stop checking —
+        //  it would run 200ms+ after another engine wins, bloating wall time)
+        if n >= 40 {
+            Self::mono_heap_walk(sh, nums, target, qa, qb, qc, qd);
+            return;
+        }
 
+        // Shared heap walk for all n
+        Self::mono_heap_walk(sh, &sorted, target, qa, qb, qc, qd);
+    }
+
+    /// Monolithic 4-way heap walk with stop checks every 512 ops.
+    fn mono_heap_walk(sh: &Shared, sorted: &[u128], target: u128,
+        qa: &[u128], qb: &[u128], qc: &[u128], qd: &[u128])
+    {
         let a = build_sums_u128(qa, target);
         let b = build_sums_u128(qb, target);
         let c = build_sums_u128(qc, target);
@@ -77,7 +95,11 @@ impl GroupDecomposeEngine {
         if a.is_empty() || b.is_empty() || c.is_empty() || d.is_empty() { return; }
         if sh.stopped() { return; }
 
-        // AB min-heap
+        let qa_sz = qa.len();
+        let qb_sz = qb.len();
+        let qc_sz = qc.len();
+
+        // AB min-heap: start from smallest pairs
         let mut min_heap: BinaryHeap<Reverse<(u128, u32, u32)>> =
             BinaryHeap::with_capacity(b.len());
         for j in 0..b.len() {
@@ -85,7 +107,7 @@ impl GroupDecomposeEngine {
             if s <= target { min_heap.push(Reverse((s, 0, j as u32))); }
         }
 
-        // CD max-heap
+        // CD max-heap: start from largest pairs  
         let last_c = c.len() - 1;
         let mut max_heap: BinaryHeap<(u128, u32, u32)> =
             BinaryHeap::with_capacity(d.len());
@@ -187,6 +209,7 @@ impl GroupDecomposeEngine {
 /// Build all subset sums using u128 Gray-code (SS technique)
 fn build_sums_u128(elems: &[u128], target: u128) -> Vec<(u128, u64)> {
     let n = elems.len();
+    if n > 15 { return Vec::new(); }
     let total = 1u64 << n;
     let mut sums = Vec::with_capacity(total as usize);
     let mut pref = vec![0u128; n + 1];

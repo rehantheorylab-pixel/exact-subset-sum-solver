@@ -1,6 +1,5 @@
 use num_bigint::BigUint;
 use num_traits::{ToPrimitive, Zero};
-use std::sync::atomic::Ordering;
 use crate::controller::{Engine, Shared};
 
 pub struct DigitFilterEngine;
@@ -86,14 +85,12 @@ impl Engine for DigitFilterEngine {
         let zero = BigUint::zero();
 
         if !Self::last_2_digits_reachable(&p.numbers, &p.target, &zero) {
-            sh.proved_impossible.store(true, Ordering::Release);
-            sh.stop.store(true, Ordering::Release);
+            sh.prove_impossible();
             return;
         }
 
         if !Self::first_digit_feasible(&p.numbers, &p.target, &zero) {
-            sh.proved_impossible.store(true, Ordering::Release);
-            sh.stop.store(true, Ordering::Release);
+            sh.prove_impossible();
         }
     }
 }

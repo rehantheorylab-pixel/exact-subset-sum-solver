@@ -25,6 +25,12 @@ pub mod unified_solver;
 pub mod quantum_grover;
 pub mod distributed_solver;
 
+// LEGACY ENGINES - ported from older codebase
+pub mod beam;
+pub mod ksum;
+pub mod hard_u128;
+pub mod estimate;
+
 // WORLD-RECORD ENGINES - Phase 2 additions
 pub mod greedy_plus;
 pub mod split_solver;
@@ -90,6 +96,14 @@ pub fn build(name: &'static str) -> Option<Box<dyn Engine>> {
         "DensitySplit" => Some(Box::new(density_split::DensitySplitEngine)),
         "LLLSolver" => Some(Box::new(lll_solver::LLLSolver)),
         "RecursiveDensity" => Some(Box::new(recursive_density::RecursiveDensitySolver)),
+
+        // LEGACY ENGINES - ported from older codebase
+        "Beam-SRP" => Some(Box::new(beam::BeamEngine)),
+        "KSum" => Some(Box::new(ksum::KSumEngine)),
+        "Hard-U128" => Some(Box::new(hard_u128::HardU128Engine)),
+        "Estimate" => Some(Box::new(estimate::EstimateEngine)),
+        "PMAS-Bit" => Some(Box::new(pmas::PmasBit)),
+        "PMAS-Redundancy" => Some(Box::new(pmas::PmasRedundancy)),
 
         _ => None,
     }

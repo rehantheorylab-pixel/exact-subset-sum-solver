@@ -97,7 +97,7 @@ impl Engine for DensitySplitEngine {
 }
 
 fn build_sums(elems: &[u128], target: u128) -> Vec<(u128, u64)> {
-    let n = elems.len().min(22); // Cap to keep memory manageable
+    let n = elems.len().min(15); // Cap to keep memory manageable
     let total = 1u64 << n;
     let mut sums = Vec::with_capacity(total as usize);
     let mut pref = vec![0u128; n + 1];

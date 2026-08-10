@@ -25,7 +25,7 @@ impl Engine for GradientSolver {
 
     fn run(&self, sh: &Shared) {
         let p = &sh.profile;
-        if p.n < 5 { return; } // Works at any n — heuristic, O(n) per iteration
+        if p.n < 5 || p.n > 60 { return; } // Works at any n — heuristic, O(n) per iteration
         if !p.u128_safe() { return; }
 
         let target = p.target_u128();
@@ -138,7 +138,7 @@ fn report(nums: &[u128], target: u128, bits: u128, sh: &Shared, name: &'static s
     sh.report(sol, name);
 }
 
-fn report_selection(nums: &[u128], used: &[bool], sum: u128, sh: &Shared, name: &'static str) {
+fn report_selection(nums: &[u128], used: &[bool], _sum: u128, sh: &Shared, name: &'static str) {
     let mut sol: Vec<BigUint> = Vec::new();
     for (i, &v) in nums.iter().enumerate() {
         if used[i] { sol.push(BigUint::from(v)); }

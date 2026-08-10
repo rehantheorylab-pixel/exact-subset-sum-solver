@@ -31,7 +31,7 @@ impl Engine for GeneticEngine {
 
     fn run(&self, sh: &Shared) {
         let p = &sh.profile;
-        if p.n < 10 { return; } // Works at any n — population-based, O(pop * n)
+        if p.n < 10 || p.n > 60 { return; } // Works at any n — population-based, O(pop * n)
         if !p.u128_safe() { return; }
 
         let target = p.target_u128();

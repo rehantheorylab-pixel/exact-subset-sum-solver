@@ -19,6 +19,7 @@ impl Engine for BackwardEngine {
         if p.total_sum < p.target {
             return;
         }
+        if p.n > 28 { return; }
         let excess = &p.total_sum - &p.target;
         if excess.is_zero() {
             sh.report(p.numbers.clone(), "Backward");

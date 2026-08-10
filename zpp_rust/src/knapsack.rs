@@ -6,7 +6,7 @@ use std::collections::HashMap;
 /// Unsigned subset sums for a slice, sorted ascending, pruning s > target.
 pub fn subset_sums_u128(elems: &[u128], target: u128) -> Vec<(u128, u64)> {
     let n = elems.len();
-    if n > 31 {
+    if n > 20 {
         return Vec::new();
     }
     let total = 1u64 << n;
@@ -71,10 +71,10 @@ pub fn schroeppel_shamir_u128(
     let cpu_cores = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(4);
-    // Include GPU compute units for partition sizing (actual GPU kernel
-    // execution is planned — for now the detection is informational and
-    // CPU threads handle the expanded partition count).
-    let num_threads = crate::gpu::optimal_partition_count(cpu_cores);
+    // For small problem sizes (few entries per quarter), use fewer partitions
+    // to avoid thread-creation overhead dominating runtime.
+    let max_partitions = (a.len().max(b.len()).max(c.len()).max(d.len()) / 256).max(1).min(cpu_cores);
+    let num_threads = max_partitions.min(8); // hard cap at 8 threads
 
     let result = std::sync::Mutex::new(None::<Vec<u128>>);
     let stop = std::sync::atomic::AtomicBool::new(false);
@@ -245,11 +245,12 @@ pub fn schroeppel_shamir_big(
     let cpu_cores = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(4);
-    let num_threads = crate::gpu::optimal_partition_count(cpu_cores);
+    let max_partitions = (a.len().max(b.len()).max(c.len()).max(d.len()) / 256).max(1).min(cpu_cores);
+    let num_threads = max_partitions.min(8);
+    let n_big = BigUint::from(num_threads as u64);
 
     let result = std::sync::Mutex::new(None::<Vec<BigUint>>);
     let stop = std::sync::atomic::AtomicBool::new(false);
-    let n_big = BigUint::from(num_threads as u64);
 
     let a_ref = &a;
     let b_ref = &b;
@@ -395,7 +396,7 @@ pub fn schroeppel_shamir_big(
 /// Build sorted subset sums for a slice of BigUint elements.
 fn subset_sums_big(elems: &[BigUint], target: &BigUint) -> Vec<(BigUint, u64)> {
     let n = elems.len();
-    if n > 31 {
+    if n > 20 {
         return Vec::new();
     }
     let total = 1u64 << n;
@@ -452,7 +453,7 @@ pub fn signed_buckets_mod(
         buckets.insert(0, SignedEntry { sum: 0, mask: 0 });
         return buckets;
     }
-    if q > 22 {
+    if q > 16 {
         return buckets;
     }
 
@@ -515,7 +516,7 @@ pub fn signed_buckets_mod_bcj(
         buckets.insert(0, SignedEntry { sum: 0, mask: 0 });
         return buckets;
     }
-    if q > 22 {
+    if q > 16 {
         return buckets;
     }
 

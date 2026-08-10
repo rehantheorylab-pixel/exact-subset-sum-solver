@@ -112,6 +112,6 @@ impl Engine for MitmEngine {
         }
 
         // Exhaustive enumeration — no match means impossible.
-        sh.proved_impossible.store(true, std::sync::atomic::Ordering::Release);
+        sh.prove_impossible();
     }
 }

@@ -157,6 +157,23 @@ fn handle_solve(body: &[u8]) -> (&'static str, String) {
         names.truncate(settings.max_engines);
     }
 
+    // Safety cap: prevent crashes. Keep solver engines for large n.
+    if red_profile.n >= 40 {
+        let safe = if red_profile.n >= 60 { 4 } else { 6 };
+        // Always keep solver engines
+        let mut kept: Vec<&str> = Vec::new();
+        let mut rest: Vec<&str> = Vec::new();
+        for n in &names {
+            if matches!(*n, "GroupDecompose" | "Schroeppel-Shamir") {
+                if kept.len() < 2 { kept.push(n); }
+            } else {
+                rest.push(n);
+            }
+        }
+        kept.extend(rest.into_iter().take(safe - kept.len()));
+        if kept.len() < names.len() { names = kept; }
+    }
+
     let engines: Vec<Box<dyn Engine>> = names.iter()
         .filter_map(|n| crate::engines::build(n))
         .collect();

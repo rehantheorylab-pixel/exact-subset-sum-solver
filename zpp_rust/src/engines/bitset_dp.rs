@@ -9,7 +9,6 @@
 
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
-use std::sync::atomic::Ordering;
 
 use crate::bitset::Bitset;
 use crate::controller::{Engine, Shared};
@@ -70,7 +69,7 @@ impl Engine for BitsetDpEngine {
         }
 
         if !dp.get(target) {
-            sh.proved_impossible.store(true, Ordering::Release);
+            sh.prove_impossible();
         }
     }
 }

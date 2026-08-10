@@ -424,10 +424,9 @@ impl Engine for MdMitmEngine {
             return;
         }
 
-        // MD-MITM activates for n ≥ 80 (where other engines cap out),
-        // but also works for smaller n if called.
-        if n < 20 {
-            // Too small for hierarchical decomposition — let other engines handle it.
+        // MD-MITM activates for n ≥ 80 (where other engines cap out).
+        // For n < 60, SS/heap engines are exponentially faster.
+        if n < 60 {
             return;
         }
 

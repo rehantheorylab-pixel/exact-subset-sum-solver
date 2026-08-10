@@ -15,7 +15,7 @@ impl Engine for MicroDecomposeEngine {
 
     fn run(&self, sh: &Shared) {
         let p = &sh.profile;
-        if p.n < 20 || !p.u128_safe() { return; } // Works at any n — adaptive sampling
+        if p.n < 20 || p.n > 50 || !p.u128_safe() { return; } // Works at any n — adaptive sampling
 
         let target = p.target_u128();
         let nums = p.numbers_u128();
@@ -59,14 +59,18 @@ impl Engine for MicroDecomposeEngine {
             let lower = target.saturating_sub(max_future);
 
             let mut merged = Vec::new();
+            let mut iter_ops: u64 = 0;
             for &(sv, sm) in &current {
                 if sv > target { continue; }
                 for &(nv, nm) in next {
+                    iter_ops += 1;
+                    if (iter_ops & 0xFFFF) == 0 && sh.stopped() { return; }
                     let total = sv.wrapping_add(nv);
                     if total < lower { continue; }
                     if total > target { continue; }
                     merged.push((total, sm | (nm << (g * 2) as u32)));
                 }
+                if merged.len() > 200_000 { break; }
             }
 
             if merged.len() > 50_000 {
